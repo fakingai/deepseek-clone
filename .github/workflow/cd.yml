@@ -1,0 +1,198 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build for ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - platform: Android
+            os: ubuntu-latest
+            build_cmd: flutter build apk --release
+            artifact_path: build/app/outputs/flutter-apk/app-release.apk 
+          - platform: macOS
+            os: macos-latest
+            build_cmd: flutter build macos --release
+            artifact_path: build/macos/Build/Products/Release/DeepSeek.app
+          - platform: Windows
+            os: windows-latest
+            build_cmd: flutter build windows --release
+            artifact_path: build\windows\x64\runner\Release
+          - platform: Web
+            os: ubuntu-latest
+            build_cmd: flutter build web --release
+            artifact_path: build/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable' 
+
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macOS'
+        run: |
+          brew install cmake ninja pkg-config create-dmg
+
+      - name: Install Windows dependencies
+        if: matrix.platform == 'Windows'
+        run: |
+          choco install cmake ninja visualstudio2019buildtools visualstudio2019-workload-vctools innosetup
+
+      - name: Enable desktop
+        if: matrix.platform == 'macOS' || matrix.platform == 'Windows'
+        run: |
+          flutter config --enable-macos-desktop
+          flutter config --enable-windows-desktop
+
+      - name: Enable Web
+        if: matrix.platform == 'Web'
+        run: flutter config --enable-web
+
+      - name: Install Dependencies
+        run: |
+          flutter pub get
+          dart run build_runner build -d -v
+
+      - name: Build for ${{ matrix.platform }}
+        run: ${{ matrix.build_cmd }}
+
+      - name: Archive Artifact for Android
+        if: matrix.platform == 'Android'
+        run: cp ${{ matrix.artifact_path }} DeepSeek-Android.apk
+
+      - name: Archive Artifact for macOS
+        if: matrix.platform == 'macOS'
+        run: |
+          mkdir -p dmg
+          cp -r ${{ matrix.artifact_path }} dmg/
+          create-dmg \
+            --volname "DeepSeek" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "DeepSeek.app" 200 190 \
+            --hide-extension "DeepSeek.app" \
+            --app-drop-link 600 185 \
+            "DeepSeek-macOS.dmg" \
+            "dmg/"
+
+      - name: Create Inno Setup Script
+        if: matrix.platform == 'Windows'
+        run: |
+          $content = @"
+          [Setup]
+          AppName=DeepSeek
+          AppVersion=${{ github.ref_name }}
+          AppPublisher=DeepSeek Team
+          AppPublisherURL=https://github.com/fakingai/deepseek-clone
+          AppSupportURL=https://github.com/fakingai/deepseek-clone/issues
+          AppUpdatesURL=https://github.com/fakingai/deepseek-clone/releases
+          WizardStyle=modern
+          DefaultDirName={autopf}\DeepSeek
+          DefaultGroupName=DeepSeek
+          OutputDir=.
+          OutputBaseFilename=DeepSeek-Windows
+          Compression=lzma2/ultra64
+          SolidCompression=no
+          DisableStartupPrompt=yes
+          DisableProgramGroupPage=yes
+          UninstallDisplayIcon={app}\DeepSeek.exe
+          SetupIconFile=windows\runner\resources\app_icon.ico
+          PrivilegesRequired=lowest
+          
+          [Languages]
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+          
+          [Files]
+          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          
+          [Icons]
+          Name: "{group}\DeepSeek"; Filename: "{app}\DeepSeek.exe"
+          Name: "{commondesktop}\DeepSeek"; Filename: "{app}\DeepSeek.exe"; Tasks: desktopicon
+          
+          [Tasks]
+          Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+          
+          [Run]
+          Filename: "{app}\DeepSeek.exe"; Description: "{cm:LaunchProgram,DeepSeek}"; Flags: nowait postinstall skipifsilent
+          "@
+          Set-Content -Path "installer.iss" -Value $content
+        shell: pwsh
+
+      - name: Build Installer
+        if: matrix.platform == 'Windows'
+        run: |
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer.iss
+        shell: pwsh
+
+      - name: Archive Artifact for Web
+        if: matrix.platform == 'Web'
+        run: |
+          zip -r DeepSeek-Web.zip ${{ matrix.artifact_path }}
+
+      - name: Upload Artifact for Android
+        if: matrix.platform == 'Android'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-artifact
+          path: DeepSeek-Android.apk
+
+      - name: Upload Artifact for macOS
+        if: matrix.platform == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-artifact
+          path: DeepSeek-macOS.dmg
+
+      - name: Upload Artifact for Windows
+        if: matrix.platform == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-artifact
+          path: DeepSeek-Windows.exe
+
+      - name: Upload Artifact for Web
+        if: matrix.platform == 'Web'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Web-artifact
+          path: DeepSeek-Web.zip
+
+  release:
+    name: Create GitHub Release and Upload Artifacts
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create Release and Upload Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          files: |
+            ./artifacts/Android-artifact/DeepSeek-Android.apk
+            ./artifacts/macOS-artifact/DeepSeek-macOS.dmg
+            ./artifacts/Windows-artifact/DeepSeek-Windows.exe
+            ./artifacts/Web-artifact/DeepSeek-Web.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
