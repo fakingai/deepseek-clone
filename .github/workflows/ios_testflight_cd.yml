@@ -1,0 +1,172 @@
+name: iOS TestFlight CD
+
+on:
+  push:
+    tags:
+      - 'v*' 
+  workflow_dispatch: # Allows manual triggering
+
+permissions:
+  contents: read
+
+jobs:
+  build_and_deploy_ios_testflight:
+    name: Build and Deploy iOS to TestFlight
+    runs-on: macos-latest # iOS builds require macOS
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable' # Or your preferred channel
+
+      - name: Set up Ruby and Bundler
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0' # Or a version compatible with Fastlane
+          bundler-cache: true # Installs gems from Gemfile.lock (if present) and caches them
+          working-directory: ./ios # Ensure this points to your ios directory where Gemfile is
+
+      - name: Install Fastlane (if not cached by bundler-cache)
+        working-directory: ./ios
+        run: bundle check || bundle install
+
+      - name: Decode and Install Apple Certificate and Provisioning Profile
+        env:
+          P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_NAME: build.keychain
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo "Decoding P12 certificate..."
+          echo "$P12_BASE64" | base64 --decode --output certificate.p12
+          
+          echo "Extracting Provisioning Profile UUID and decoding..."
+          PROFILE_CONTENT_DECODED=$(echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode)
+          PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$PROFILE_CONTENT_DECODED")
+          if [ -z "$PP_UUID" ]; then
+            echo "Error: Could not extract UUID from provisioning profile."
+            exit 1
+          fi
+          # Export PP_UUID to be used in later steps
+          echo "PP_UUID_ENV=$PP_UUID" >> $GITHUB_ENV
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          PP_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/$PP_UUID.mobileprovision"
+          echo "$PROFILE_CONTENT_DECODED" > "$PP_PATH"
+          echo "Provisioning Profile $PP_UUID.mobileprovision installed to $PP_PATH"
+
+          echo "Creating temporary keychain..."
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security list-keychains -d user -s "$KEYCHAIN_NAME" login.keychain # Add to search list
+          security default-keychain -s "$KEYCHAIN_NAME"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME" # Timeout for 6 hours
+
+          echo "Importing P12 into keychain..."
+          security import certificate.p12 -k "$KEYCHAIN_NAME" -P "$P12_PASSWORD" -A # -A allows any app to access
+          rm -f certificate.p12 # Clean up
+          
+          echo "Setting key partition list (for codesign access)..."
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          echo "Certificate and provisioning profile imported successfully."
+
+      - name: Install App Store Connect API Key
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          mkdir -p $HOME/.appstoreconnect/auth
+          KEY_PATH="$HOME/.appstoreconnect/auth/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          echo "${APP_STORE_CONNECT_API_PRIVATE_KEY}" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH" # Ensure correct permissions
+          echo "App Store Connect API Key installed to $KEY_PATH"
+
+      - name: Install Flutter Dependencies
+        run: flutter pub get
+
+      - name: Run Build Runner (if applicable)
+        # If your project uses build_runner, uncomment the following lines
+        # run: |
+        #   flutter pub run build_runner build --delete-conflicting-outputs
+        # From your cd.yml, it seems you use:
+        run: dart run build_runner build -d -v
+
+      - name: Generate ExportOptions.plist
+        env:
+          # APPLE_TEAM_ID and IOS_BUNDLE_ID should be set as GitHub Variables in your repository settings
+          # Settings > Secrets and variables > Actions > Variables
+          # PP_UUID_ENV is passed from the previous step
+          APPLE_TEAM_ID_VAR: ${{ vars.APPLE_TEAM_ID }}
+          IOS_BUNDLE_ID_VAR: ${{ vars.IOS_BUNDLE_ID }}
+        run: |
+          if [ ! -f "ios/ExportOptions.plist" ]; then
+            echo "Error: Template file ios/ExportOptions.plist not found."
+            echo "Please create it in your ios/ directory with placeholders like {{APPLE_TEAM_ID_PLACEHOLDER}}, {{IOS_BUNDLE_ID_PLACEHOLDER}}, and {{PROVISIONING_PROFILE_UUID_PLACEHOLDER}}."
+            exit 1
+          fi
+
+          echo "Checking required variables..."
+          if [ -z "$APPLE_TEAM_ID_VAR" ]; then
+            echo "Error: GitHub Variable APPLE_TEAM_ID is not set."
+            exit 1
+          fi
+          if [ -z "$IOS_BUNDLE_ID_VAR" ]; then
+            echo "Error: GitHub Variable IOS_BUNDLE_ID is not set."
+            exit 1
+          fi
+          if [ -z "$PP_UUID_ENV" ]; then
+            echo "Error: PP_UUID_ENV is not set. Check the 'Decode and Install' step."
+            exit 1
+          fi
+
+          echo "Generating ExportOptions.plist from template..."
+          cp ios/ExportOptions.plist ios/ExportOptions_generated.plist
+          
+          # Replace placeholders
+          # Using | as delimiter for sed because PP_UUID_ENV might contain / which conflicts with default / delimiter
+          sed -i.bak "s|{{APPLE_TEAM_ID_PLACEHOLDER}}|$APPLE_TEAM_ID_VAR|g" ios/ExportOptions_generated.plist
+          sed -i.bak "s|{{IOS_BUNDLE_ID_PLACEHOLDER}}|$IOS_BUNDLE_ID_VAR|g" ios/ExportOptions_generated.plist
+          sed -i.bak "s|{{PROVISIONING_PROFILE_UUID_PLACEHOLDER}}|$PP_UUID_ENV|g" ios/ExportOptions_generated.plist
+          rm -f ios/ExportOptions_generated.plist.bak # Remove backup file created by sed -i
+
+          if [ ! -s ios/ExportOptions_generated.plist ]; then
+              echo "Error: Generated ios/ExportOptions_generated.plist is empty or not created. Check placeholders, variable values, and sed command."
+              echo "--- Template (ios/ExportOptions.plist) ---"
+              cat ios/ExportOptions.plist
+              echo "--- End of Template ---"
+              exit 1
+          fi
+          
+          echo "Generated ExportOptions_generated.plist content:"
+          cat ios/ExportOptions_generated.plist
+          # Removed 'flutter build ipa' from here, Fastlane's gym will handle it.
+
+      - name: Build and Deploy with Fastlane
+        working-directory: ./ios
+        env:
+          # These are used by Fastlane's pilot action.
+          # The API key file is created by the "Install App Store Connect API Key" step.
+          # pilot will look for it at the conventional path.
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          # Ensure the key path is correct if pilot doesn't find it automatically:
+          # APPSTORE_CONNECT_API_KEY_PATH: "$HOME/.appstoreconnect/auth/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
+
+          # Pass these if your Fastfile needs them directly, though gym/pilot often infer or use ExportOptions
+          # APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }} 
+          # IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+        run: bundle exec fastlane deploy_testflight
+
+      - name: Clean up keychain
+        if: always() # Ensures this step runs even if previous steps fail
+        env:
+          KEYCHAIN_NAME: build.keychain
+        run: |
+          echo "Deleting temporary keychain $KEYCHAIN_NAME..."
+          security delete-keychain "$KEYCHAIN_NAME" || echo "Keychain $KEYCHAIN_NAME not found or already deleted."
