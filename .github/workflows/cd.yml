@@ -97,12 +97,12 @@ jobs:
           [Setup]
           AppName=DeepSeek
           AppVersion=${{ github.ref_name }}
-          AppPublisher=DeepSeek Team
+          AppPublisher=Fakingai Team
           AppPublisherURL=https://github.com/fakingai/deepseek-clone
           AppSupportURL=https://github.com/fakingai/deepseek-clone/issues
           AppUpdatesURL=https://github.com/fakingai/deepseek-clone/releases
           WizardStyle=modern
-          DefaultDirName={autopf}\DeepSeek
+          DefaultDirName={autopf}\deepseek
           DefaultGroupName=DeepSeek
           OutputDir=.
           OutputBaseFilename=DeepSeek-Windows
@@ -196,3 +196,43 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy_web_to_cloudflare_pages:
+    name: Deploy Web to Cloudflare Pages
+    runs-on: ubuntu-latest
+    needs: release # Depends on the successful completion of the 'release' job
+    permissions:
+      contents: read    # May be needed by actions, e.g., checkout or if gitHubToken is used by pages-action
+      deployments: write # Allows cloudflare/pages-action to create GitHub deployment statuses
+    steps:
+      - name: Download Web Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Web-artifact # Must match the 'name' used in 'upload-artifact' in the 'build' job
+          path: ./cf-pages-artifact # Directory to download the artifact to
+
+      - name: Create deployment target directory
+        run: mkdir -p ./deploy_target
+
+      - name: Unzip Web Artifact
+        # The DeepSeek-Web.zip artifact is created from the 'build/web' directory
+        # and thus contains 'build/web/*' within it.
+        # This command unzips it into './deploy_target', resulting in './deploy_target/build/web/*'.
+        run: unzip ./cf-pages-artifact/DeepSeek-Web.zip -d ./deploy_target
+
+      - name: Verify unzipped structure (for debugging)
+        run: |
+          echo "Listing contents of downloaded artifact directory (cf-pages-artifact):"
+          ls -R ./cf-pages-artifact
+          echo "Listing contents of unzip target directory (deploy_target):"
+          ls -R ./deploy_target
+          echo "Listing contents of expected deployment root (deploy_target/build/web):"
+          ls -R ./deploy_target/build/web || echo "Directory ./deploy_target/build/web not found or is empty."
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3 # Changed to wrangler-action
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # projectName and directory are now part of the command
+          command: pages deploy ./deploy_target/build/web --project-name='deepseek-clone'
