@@ -68,7 +68,10 @@ jobs:
           dart run build_runner build -d -v
 
       - name: Build for ${{ matrix.platform }}
-        run: ${{ matrix.build_cmd }}
+        run: |
+          flutter build ${{ matrix.platform == 'Android' && 'apk' || matrix.platform == 'Web' && 'web' || matrix.platform == 'macOS' && 'macos' || 'windows' }} --release --dart-define=DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
       - name: Archive Artifact for Android
         if: matrix.platform == 'Android'

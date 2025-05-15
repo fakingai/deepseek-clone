@@ -8,13 +8,21 @@ abstract class LocalDataSource {
 
 class LocalDataSourceImpl implements LocalDataSource {
   static const String _apiKeyKey = 'api_key';
+  static const String _defaultApiKeyFromEnv = String.fromEnvironment('DEEPSEEK_API_KEY');
   final SharedPreferences sharedPreferences;
 
   LocalDataSourceImpl({required this.sharedPreferences});
 
   @override
   Future<String?> getApiKey() async {
-    return sharedPreferences.getString(_apiKeyKey);
+    final storedApiKey = sharedPreferences.getString(_apiKeyKey);
+    if (storedApiKey != null && storedApiKey.isNotEmpty) {
+      return storedApiKey;
+    }
+    if (_defaultApiKeyFromEnv.isNotEmpty) {
+      return _defaultApiKeyFromEnv;
+    }
+    return null;
   }
 
   @override
