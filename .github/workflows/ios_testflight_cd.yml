@@ -44,20 +44,21 @@ jobs:
         run: |
           echo "Decoding P12 certificate..."
           echo "$P12_BASE64" | base64 --decode --output certificate.p12
-          
-          echo "Extracting Provisioning Profile UUID and decoding..."
-          PROFILE_CONTENT_DECODED=$(echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode)
-          PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$PROFILE_CONTENT_DECODED")
+
+          echo "Decoding provisioning profile..."
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > profile.mobileprovision
+
+          echo "Extracting Provisioning Profile UUID..."
+          PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$(security cms -D -i profile.mobileprovision)")
           if [ -z "$PP_UUID" ]; then
             echo "Error: Could not extract UUID from provisioning profile."
             exit 1
           fi
-          # Export PP_UUID to be used in later steps
           echo "PP_UUID_ENV=$PP_UUID" >> $GITHUB_ENV
 
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           PP_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/$PP_UUID.mobileprovision"
-          echo "$PROFILE_CONTENT_DECODED" > "$PP_PATH"
+          cp profile.mobileprovision "$PP_PATH"
           echo "Provisioning Profile $PP_UUID.mobileprovision installed to $PP_PATH"
 
           echo "Creating temporary keychain..."
@@ -70,7 +71,7 @@ jobs:
           echo "Importing P12 into keychain..."
           security import certificate.p12 -k "$KEYCHAIN_NAME" -P "$P12_PASSWORD" -A # -A allows any app to access
           rm -f certificate.p12 # Clean up
-          
+
           echo "Setting key partition list (for codesign access)..."
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
           echo "Certificate and provisioning profile imported successfully."
