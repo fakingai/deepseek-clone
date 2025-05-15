@@ -160,8 +160,8 @@ jobs:
           # APPSTORE_CONNECT_API_KEY_PATH: "$HOME/.appstoreconnect/auth/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
 
           # Pass these if your Fastfile needs them directly, though gym/pilot often infer or use ExportOptions
-          # APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }} 
-          # IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }} 
+          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
         run: bundle exec fastlane deploy_testflight
 
       - name: Clean up keychain

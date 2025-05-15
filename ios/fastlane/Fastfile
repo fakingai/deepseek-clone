@@ -9,6 +9,9 @@ platform :ios do
     # Run build_runner if applicable (run from root)
     sh("cd ../../ && dart run build_runner build -d -v")
 
+    # Ensure CocoaPods dependencies are installed (fixes xcfilelist errors)
+    sh("cd ../ && pod install --repo-update")
+
     # Build the IPA using gym.
     # It assumes ExportOptions_generated.plist is created by the CI workflow in the ios/ directory.
     # It also assumes the keychain and provisioning profiles are set up by the CI workflow.
@@ -19,6 +22,7 @@ platform :ios do
       output_directory: "../build/ios/ipa",  # Output path relative to this Fastfile
       output_name: "DeepSeek-iOS.ipa",    # Consistent artifact name
       clean: true,
+      export_team_id: ENV["APPLE_TEAM_ID"], # <-- Add your Apple Team ID here or use ENV variable
       # If signing is perfectly handled by ExportOptions.plist and keychain setup:
       # You might not need specific code_sign_identity or provisioning_profile_path here.
       # gym will use what's available and configured.
@@ -30,8 +34,8 @@ platform :ios do
     # pilot uses App Store Connect API Key environment variables set in the GitHub workflow.
     pilot(
       ipa: "../build/ios/ipa/DeepSeek-iOS.ipa", # Path to the generated IPA
-      # app_identifier: ENV["IOS_BUNDLE_ID_VAR"], # Usually inferred, but can be set via ENV
-      # team_id: ENV["APPLE_TEAM_ID_VAR"],        # Usually inferred, but can be set via ENV
+      app_identifier: ENV["IOS_BUNDLE_ID"], # Usually inferred, but can be set via ENV
+      team_id: ENV["APPLE_TEAM_ID"],        # Usually inferred, but can be set via ENV
       skip_waiting_for_build_processing: true, # Optional: Don't wait for Apple to process the build
       distribute_external: false # Set to true if you want to distribute to external testers immediately
     )
