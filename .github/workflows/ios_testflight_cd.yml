@@ -80,13 +80,6 @@ jobs:
       - name: Install Flutter Dependencies
         run: flutter pub get
 
-      - name: Run Build Runner (if applicable)
-        # If your project uses build_runner, uncomment the following lines
-        # run: |
-        #   flutter pub run build_runner build --delete-conflicting-outputs
-        # From your cd.yml, it seems you use:
-        run: dart run build_runner build -d -v
-
       - name: Generate ExportOptions.plist
         env:
           # APPLE_TEAM_ID and IOS_BUNDLE_ID should be set as GitHub Variables in your repository settings
@@ -137,29 +130,33 @@ jobs:
           cat ios/ExportOptions_generated.plist
           # Removed 'flutter build ipa' from here, Fastlane's gym will handle it.
 
+      - name: Build iOS app (release)
+        run: flutter build ios --release --no-codesign
+        
       - name: Build .xcarchive
         env:
           APPLE_TEAM_ID_VAR: ${{ vars.APPLE_TEAM_ID }}
-          IOS_BUNDLE_ID_VAR: ${{ vars.IOS_BUNDLE_ID }}
+          CODE_SIGN_IDENTITY_VAR: ${{ vars.CODE_SIGN_IDENTITY }}
+          PROVISIONING_PROFILE_SPECIFIER_VAR: ${{ vars.PROVISIONING_PROFILE_SPECIFIER }}
         run: |
-          xcodebuild -workspace ios/Runner.xcworkspace \
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -sdk iphoneos \
             -archivePath build/ios/archive/Runner.xcarchive \
-            -allowProvisioningUpdates \
+            archive \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID_VAR" \
-            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID_VAR" \
-            archive
+            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY_VAR" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER_VAR" 
 
       - name: Export .ipa from .xcarchive
         run: |
           xcodebuild -exportArchive \
             -archivePath build/ios/archive/Runner.xcarchive \
             -exportOptionsPlist ios/ExportOptions_generated.plist \
-            -exportPath build/ios/ipa \
-            -allowProvisioningUpdates
-
+            -exportPath build/ios/ipa
+            
       - name: Upload .ipa to TestFlight with Transporter
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
