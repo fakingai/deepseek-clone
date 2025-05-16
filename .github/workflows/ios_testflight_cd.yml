@@ -138,6 +138,9 @@ jobs:
           # Removed 'flutter build ipa' from here, Fastlane's gym will handle it.
 
       - name: Build .xcarchive
+        env:
+          APPLE_TEAM_ID_VAR: ${{ vars.APPLE_TEAM_ID }}
+          IOS_BUNDLE_ID_VAR: ${{ vars.IOS_BUNDLE_ID }}
         run: |
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
@@ -145,6 +148,8 @@ jobs:
             -sdk iphoneos \
             -archivePath build/ios/archive/Runner.xcarchive \
             -allowProvisioningUpdates \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID_VAR" \
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID_VAR" \
             archive
 
       - name: Export .ipa from .xcarchive
