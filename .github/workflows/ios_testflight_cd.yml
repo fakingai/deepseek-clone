@@ -21,18 +21,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable' # Or your preferred channel
-
-      - name: Set up Ruby and Bundler
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.0' # Or a version compatible with Fastlane
-          bundler-cache: true # Installs gems from Gemfile.lock (if present) and caches them
-          working-directory: ./ios # Ensure this points to your ios directory where Gemfile is
-
-      - name: Install Fastlane (if not cached by bundler-cache)
-        working-directory: ./ios
-        run: bundle check || bundle install
+          channel: 'stable' # Or your preferred channel 
 
       - name: Decode and Install Apple Certificate and Provisioning Profile
         env:
