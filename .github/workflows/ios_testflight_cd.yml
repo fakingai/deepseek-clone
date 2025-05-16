@@ -148,21 +148,46 @@ jobs:
           cat ios/ExportOptions_generated.plist
           # Removed 'flutter build ipa' from here, Fastlane's gym will handle it.
 
-      - name: Build and Deploy with Fastlane
-        working-directory: ./ios
+      - name: Build .xcarchive
+        run: |
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -allowProvisioningUpdates \
+            archive
+
+      - name: Export .ipa from .xcarchive
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportOptionsPlist ios/ExportOptions_generated.plist \
+            -exportPath build/ios/ipa \
+            -allowProvisioningUpdates
+
+      - name: Upload .ipa to TestFlight with Transporter
         env:
-          # These are used by Fastlane's pilot action.
-          # The API key file is created by the "Install App Store Connect API Key" step.
-          # pilot will look for it at the conventional path.
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          # Ensure the key path is correct if pilot doesn't find it automatically:
-          # APPSTORE_CONNECT_API_KEY_PATH: "$HOME/.appstoreconnect/auth/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
-
-          # Pass these if your Fastfile needs them directly, though gym/pilot often infer or use ExportOptions
-          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }} 
-          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
-        run: bundle exec fastlane deploy_testflight
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          IPA_PATH="build/ios/ipa/Runner.ipa"
+          if [ ! -f "$IPA_PATH" ]; then
+            echo "Error: IPA not found at $IPA_PATH"
+            exit 1
+          fi
+          API_KEY_PATH="$HOME/.appstoreconnect/auth/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          if [ ! -f "$API_KEY_PATH" ]; then
+            echo "Error: API Key not found at $API_KEY_PATH"
+            exit 1
+          fi
+          xcrun transporter -m upload \
+            -asset_path "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --privateKey "$API_KEY_PATH" \
+            -v
 
       - name: Clean up keychain
         if: always() # Ensures this step runs even if previous steps fail
