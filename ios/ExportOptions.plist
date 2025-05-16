@@ -7,7 +7,9 @@
     <key>teamID</key>
     <string>{{APPLE_TEAM_ID_PLACEHOLDER}}</string>
     <key>uploadBitcode</key>
-    <true/>
+    <false/>
+    <key>compileBitcode</key>
+    <false/>
     <key>uploadSymbols</key>
     <true/>
     <key>signingStyle</key>
