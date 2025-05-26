@@ -166,7 +166,7 @@ class _HomePageState extends State<HomePage> {
           const DeepSeekLogo(size: 80),
           const SizedBox(height: 30),
           Text(
-            '嗨！我是 DeepSeek',
+            '嗨！我是 智雅(Zhiya)',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
             ),

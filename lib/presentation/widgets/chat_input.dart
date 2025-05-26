@@ -56,7 +56,7 @@ class _ChatInputState extends State<ChatInput> { // State class
                 maxLength: null,
                 textInputAction: TextInputAction.newline,
                 decoration: InputDecoration(
-                hintText: '给 DeepSeek 发送消息',
+                hintText: '给 Zhiya 发送消息',
                 hintStyle: TextStyle(
                   color: Theme.of(context).brightness == Brightness.light
                     ? Colors.black54

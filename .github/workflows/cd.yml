@@ -26,7 +26,7 @@ jobs:
           - platform: macOS
             os: macos-latest
             build_cmd: flutter build macos --release
-            artifact_path: build/macos/Build/Products/Release/DeepSeek.app
+            artifact_path: build/macos/Build/Products/Release/Zhiya.app
           - platform: Windows
             os: windows-latest
             build_cmd: flutter build windows --release
@@ -75,7 +75,7 @@ jobs:
 
       - name: Archive Artifact for Android
         if: matrix.platform == 'Android'
-        run: cp ${{ matrix.artifact_path }} DeepSeek-Android.apk
+        run: cp ${{ matrix.artifact_path }} Zhiya-Android.apk
 
       - name: Archive Artifact for macOS
         if: matrix.platform == 'macOS'
@@ -83,14 +83,14 @@ jobs:
           mkdir -p dmg
           cp -r ${{ matrix.artifact_path }} dmg/
           create-dmg \
-            --volname "DeepSeek" \
+            --volname "Zhiya" \
             --window-pos 200 120 \
             --window-size 800 400 \
             --icon-size 100 \
-            --icon "DeepSeek.app" 200 190 \
-            --hide-extension "DeepSeek.app" \
+            --icon "Zhiya.app" 200 190 \
+            --hide-extension "Zhiya.app" \
             --app-drop-link 600 185 \
-            "DeepSeek-macOS.dmg" \
+            "Zhiya-macOS.dmg" \
             "dmg/"
 
       - name: Create Inno Setup Script
@@ -98,22 +98,22 @@ jobs:
         run: |
           $content = @"
           [Setup]
-          AppName=DeepSeek
+          AppName=Zhiya
           AppVersion=${{ github.ref_name }}
           AppPublisher=Fakingai Team
           AppPublisherURL=https://github.com/fakingai/deepseek-clone
           AppSupportURL=https://github.com/fakingai/deepseek-clone/issues
           AppUpdatesURL=https://github.com/fakingai/deepseek-clone/releases
           WizardStyle=modern
-          DefaultDirName={autopf}\deepseek
-          DefaultGroupName=DeepSeek
+          DefaultDirName={autopf}\zhiya
+          DefaultGroupName=Zhiya
           OutputDir=.
-          OutputBaseFilename=DeepSeek-Windows
+          OutputBaseFilename=Zhiya-Windows
           Compression=lzma2/ultra64
           SolidCompression=no
           DisableStartupPrompt=yes
           DisableProgramGroupPage=yes
-          UninstallDisplayIcon={app}\DeepSeek.exe
+          UninstallDisplayIcon={app}\Zhiya.exe
           SetupIconFile=windows\runner\resources\app_icon.ico
           PrivilegesRequired=lowest
           
@@ -124,14 +124,14 @@ jobs:
           Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
           
           [Icons]
-          Name: "{group}\DeepSeek"; Filename: "{app}\DeepSeek.exe"
-          Name: "{commondesktop}\DeepSeek"; Filename: "{app}\DeepSeek.exe"; Tasks: desktopicon
+          Name: "{group}\Zhiya"; Filename: "{app}\Zhiya.exe"
+          Name: "{commondesktop}\Zhiya"; Filename: "{app}\Zhiya.exe"; Tasks: desktopicon
           
           [Tasks]
           Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
           
           [Run]
-          Filename: "{app}\DeepSeek.exe"; Description: "{cm:LaunchProgram,DeepSeek}"; Flags: nowait postinstall skipifsilent
+          Filename: "{app}\Zhiya.exe"; Description: "{cm:LaunchProgram,Zhiya}"; Flags: nowait postinstall skipifsilent
           "@
           Set-Content -Path "installer.iss" -Value $content
         shell: pwsh
@@ -145,35 +145,35 @@ jobs:
       - name: Archive Artifact for Web
         if: matrix.platform == 'Web'
         run: |
-          zip -r DeepSeek-Web.zip ${{ matrix.artifact_path }}
+          zip -r Zhiya-Web.zip ${{ matrix.artifact_path }}
 
       - name: Upload Artifact for Android
         if: matrix.platform == 'Android'
         uses: actions/upload-artifact@v4
         with:
           name: Android-artifact
-          path: DeepSeek-Android.apk
+          path: Zhiya-Android.apk
 
       - name: Upload Artifact for macOS
         if: matrix.platform == 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: macOS-artifact
-          path: DeepSeek-macOS.dmg
+          path: Zhiya-macOS.dmg
 
       - name: Upload Artifact for Windows
         if: matrix.platform == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: Windows-artifact
-          path: DeepSeek-Windows.exe
+          path: Zhiya-Windows.exe
 
       - name: Upload Artifact for Web
         if: matrix.platform == 'Web'
         uses: actions/upload-artifact@v4
         with:
           name: Web-artifact
-          path: DeepSeek-Web.zip
+          path: Zhiya-Web.zip
 
   release:
     name: Create GitHub Release and Upload Artifacts
@@ -190,10 +190,10 @@ jobs:
         with:
           name: Release ${{ github.ref_name }}
           files: |
-            ./artifacts/Android-artifact/DeepSeek-Android.apk
-            ./artifacts/macOS-artifact/DeepSeek-macOS.dmg
-            ./artifacts/Windows-artifact/DeepSeek-Windows.exe
-            ./artifacts/Web-artifact/DeepSeek-Web.zip
+            ./artifacts/Android-artifact/Zhiya-Android.apk
+            ./artifacts/macOS-artifact/Zhiya-macOS.dmg
+            ./artifacts/Windows-artifact/Zhiya-Windows.exe
+            ./artifacts/Web-artifact/Zhiya-Web.zip
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -218,10 +218,10 @@ jobs:
         run: mkdir -p ./deploy_target
 
       - name: Unzip Web Artifact
-        # The DeepSeek-Web.zip artifact is created from the 'build/web' directory
+        # The Zhiya-Web.zip artifact is created from the 'build/web' directory
         # and thus contains 'build/web/*' within it.
         # This command unzips it into './deploy_target', resulting in './deploy_target/build/web/*'.
-        run: unzip ./cf-pages-artifact/DeepSeek-Web.zip -d ./deploy_target
+        run: unzip ./cf-pages-artifact/Zhiya-Web.zip -d ./deploy_target
 
       - name: Verify unzipped structure (for debugging)
         run: |
