@@ -131,7 +131,9 @@ jobs:
           # Removed 'flutter build ipa' from here, Fastlane's gym will handle it. 
 
       - name: Build iOS app (release)
-        run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }}
+        run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }} --dart-define=DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         
       - name: Build .xcarchive
         env:
